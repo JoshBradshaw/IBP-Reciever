@@ -71,16 +71,29 @@ class MainWindow(QtGui.QWidget):
         self.teensy = Teensy()
         self.update_serial_port_selector()
         self.monitor_running = False
-        self.plot_xrange = (0, 50)
-        self.plot_yrange = (-300, 300)
+        self.scrolling_pen_width = 5
+        self.sampling_rate = 500 # Hz
+        self.init_curves()        
+        
+    def init_curves(self):
+        self.trigger_plot.clear()
+        self.scrolling_pen_pos = 0
+        self.x_seconds = np.linspace(0, 40, 40*self.sampling_rate)
+        self.data_buffer = np.empty(40*self.sampling_rate)
+        self.data_buffer.fill(np.nan)
+        self.trigger_buffer = np.empty(40*self.sampling_rate)
+        self.trigger_buffer.fill(np.nan)
+        self.bp_curve = self.trigger_plot.plot(self.x_seconds, self.data_buffer)
+        self.change_timescale()
+        self.change_vertical_scale()
+        self.trigger_curve = self.trigger_plot.plot(self.x_seconds, self.trigger_buffer, pen= pg.mkPen('r'))
+        self.trigger_plot.update()
 
     @QTSlotExceptionRationalizer("bool")
     def init_gui(self):
         QtGui.QWidget.__init__(self, parent=None)
         # button for opening dicom directory
-        self.trigger_plot = pg.PlotWidget()
-        self.trigger_plot.plot([1,2,3,4])
-        self.trigger_plot.setXRange(0, 5, padding=0)
+        self.trigger_plot = pg.PlotWidget(labels={'left':'Blood Pressure (mmHg)', 'bottom': 'time (s)'})        
         
         self.serial_port_selector = QtGui.QComboBox() 
         
@@ -122,6 +135,9 @@ class MainWindow(QtGui.QWidget):
         
         self.btn_rescan.pressed.connect(self.update_serial_port_selector) 
         self.btn_start.pressed.connect(self.start_monitor)
+        self.vertical_range_selector.currentIndexChanged.connect(self.change_vertical_scale)
+        self.timescale_selector.currentIndexChanged.connect(self.change_timescale)
+        
     
     @QTSlotExceptionRationalizer("bool")
     def update_serial_port_selector(self):
@@ -136,18 +152,59 @@ class MainWindow(QtGui.QWidget):
         
     @QTSlotExceptionRationalizer("bool")
     def update_plot(self):
+        _, x_max = self.plot_xrange
+        max_scrolling_pen_pos = x_max * self.sampling_rate
         sample_values, triggers = self.teensy.get_sensor_values()
-        bp_values = 
+        bp_values = [adc_count_to_bp(val) for val in sample_values]
+        
+        for bp_val, trigger in zip(bp_values, triggers):
+            self.scrolling_pen_pos = self.scrolling_pen_pos % max_scrolling_pen_pos
+            self.data_buffer[self.scrolling_pen_pos] = bp_val
+            self.scrolling_pen_pos += 1
+            trigger_val = int(trigger)
+            if trigger_val:
+                self.trigger_buffer[self.scrolling_pen_pos] = +400
+            else:
+                self.trigger_buffer[self.scrolling_pen_pos] = -400
+        
+        erase_l = self.scrolling_pen_pos + 1 % max_scrolling_pen_pos
+        erase_r = self.scrolling_pen_pos + 1 + self.scrolling_pen_width % max_scrolling_pen_pos
+        self.data_buffer[erase_l:erase_r] = np.nan
+        self.bp_curve.setData(self.x_seconds, self.data_buffer)
+        self.trigger_curve.setData(self.x_seconds, self.trigger_buffer)
+        self.trigger_plot.update()
     
-    def change_timescale(self):
-        pass
-    
-    def change_vertical_scale(self):
-        pass
+    @QTSlotExceptionRationalizer("bool")
+    def change_timescale(self, *e):
+        timescale_selection = self.timescale_selector.currentText()
+        if timescale_selection == '5s':
+            self.plot_xrange = (0, 5)
+        elif timescale_selection == '10s':
+            self.plot_xrange = (0, 10)
+        elif timescale_selection == '20s':
+            self.plot_xrange = (0, 20)
+        else:
+            self.plot_xrange = (0, 40)
+        
+        x_min, x_max = self.plot_xrange
+        self.trigger_plot.setXRange(x_min, x_max, padding=0)
+        self.trigger_plot.update()
+
+    @QTSlotExceptionRationalizer("bool")
+    def change_vertical_scale(self, *e):
+        vertical_scale_selection = self.vertical_range_selector.currentText()
+        if vertical_scale_selection == '+/- 300mmHg':
+            self.plot_yrange = (-300, 300)
+        else:
+            self.plot_yrange = (0, 150)
+        y_min, y_max = self.plot_yrange
+        self.trigger_plot.setYRange(y_min, y_max)
+        self.trigger_plot.update()
         
     @QTSlotExceptionRationalizer("bool")
     def start_monitor(self):
         if not self.monitor_running:
+            self.init_curves()
             self.teensy.serial_port = self.get_selected_serial_port()
             self.teensy.start()
             self.timer = QtCore.QTimer(self)
