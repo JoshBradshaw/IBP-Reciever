@@ -376,7 +376,6 @@ class Ui_win_trigger(object):
         self.logDataButton.setToolTip(_translate("win_trigger", "<html><head/><body><p>If toggled on, log files will be created based on the triggering data.</p></body></html>", None))
         self.logDataButton.setText(_translate("win_trigger", "Open Log Directory", None))
 
-import PyQt5 as Qwt5
 
 if __name__ == "__main__":
     import sys
@@ -386,4 +385,3 @@ if __name__ == "__main__":
     ui.setupUi(win_trigger)
     win_trigger.show()
     sys.exit(app.exec_())
-

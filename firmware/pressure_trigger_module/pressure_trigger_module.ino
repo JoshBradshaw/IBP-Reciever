@@ -60,6 +60,7 @@ void sample() {
         }
     }
     Serial.printf("%d %d\n", sampleVal, triggerPulseHigh);
+    Serial.send_now();
 }
 
 uint32_t ADC_conversion() {

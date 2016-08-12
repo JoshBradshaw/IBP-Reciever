@@ -1,3 +1,4 @@
+
 from __future__ import division
 
 import os
@@ -5,7 +6,6 @@ import ui_trigger
 import sys
 import numpy
 from PyQt4 import QtCore, QtGui, Qt
-import PyQt5 as Qwt
 import serial
 import serial.tools.list_ports
 import logging
@@ -40,27 +40,27 @@ gui.bpPlot.setAxisTitle(0, "BP Signal (V)")
 # times the plot refresh
 gui.timer = QtCore.QTimer()
 # line on blood pressure graph
-bp_curve=Qwt.QwtPlotCurve()  
-bp_curve.attach(gui.bpPlot)
-bp_curve.setPaintAttribute(Qwt.QwtPlotCurve.PaintFiltered, False)
-bp_curve.setPaintAttribute(Qwt.QwtPlotCurve.ClipPolygons, True)
-bp_curve.setPen(Qt.QPen(Qt.Qt.green))
+# bp_curve=Qwt.QwtPlotCurve()  
+# bp_curve.attach(gui.bpPlot)
+# bp_curve.setPaintAttribute(Qwt.QwtPlotCurve.PaintFiltered, False)
+# bp_curve.setPaintAttribute(Qwt.QwtPlotCurve.ClipPolygons, True)
+# bp_curve.setPen(Qt.QPen(Qt.Qt.green))
 
 # line on triggering graph
-trigger_curve = Qwt.QwtPlotCurve()
-trigger_curve.attach(gui.bpPlot)
-trigger_curve.setPaintAttribute(Qwt.QwtPlotCurve.PaintFiltered, False)
-trigger_curve.setPaintAttribute(Qwt.QwtPlotCurve.ClipPolygons, True)
+# trigger_curve = Qwt.QwtPlotCurve()
+# trigger_curve.attach(gui.bpPlot)
+# trigger_curve.setPaintAttribute(Qwt.QwtPlotCurve.PaintFiltered, False)
+# trigger_curve.setPaintAttribute(Qwt.QwtPlotCurve.ClipPolygons, True)
 
 sympen = Qt.QPen(Qt.Qt.red)
 sympen.setWidth(5)
-trigger_curve.setStyle(-1)
+#trigger_curve.setStyle(-1)
 # make the heart beats appear as little red triangles
-trigger_curve.setSymbol(Qwt.QwtSymbol(Qwt.QwtSymbol.VLine,
-                                      Qt.QBrush(),
-                                      sympen,
-                                      Qt.QSize(3, 3)))
-trigger_curve.setPen(Qt.QPen(Qt.Qt.red))
+#trigger_curve.setSymbol(Qwt.QwtSymbol(Qwt.QwtSymbol.VLine,
+#                                      Qt.QBrush(),
+#                                      sympen,
+#                                      Qt.QSize(3, 3)))
+#trigger_curve.setPen(Qt.QPen(Qt.Qt.red))
 
 # if its a windows 7 machine clean up the blinkyness by running anti aliasing
 # if its a windows xp or mac, do not run anti aliasing because it will lag
@@ -73,9 +73,9 @@ try:
 except:
     pass
 
-if anti_alias:
-    trigger_curve.setRenderHint(Qwt.QwtPlotItem.RenderAntialiased) # prettier, but laggy on slow computers
-    bp_curve.setRenderHint(Qwt.QwtPlotItem.RenderAntialiased) # prettier, but laggy on slow computers
+#if anti_alias:
+    #trigger_curve.setRenderHint(Qwt.QwtPlotItem.RenderAntialiased) # prettier, but laggy on slow computers
+    #bp_curve.setRenderHint(Qwt.QwtPlotItem.RenderAntialiased) # prettier, but laggy on slow computers
 
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -191,9 +191,9 @@ class plotData(object):
         logger.info("{}: {} {}".format(datetime.now().strftime('%Y-%m-%d-%H-%M-%f'), self.ys[self.last_point], self.ts[self.last_point]))
 
     def redraw_plot(self):
-        bp_curve.setData(self.xs, self.ys)
+        #bp_curve.setData(self.xs, self.ys)
         gui.bpPlot.replot() 
-        trigger_curve.setData(self.xs, self.ts+0.3)
+        #trigger_curve.setData(self.xs, self.ts+0.3)
 
     def select_speed(self):
         """get the speed selected on the dropdown and setup the axis scales accordingly"""
