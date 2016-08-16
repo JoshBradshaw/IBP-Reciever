@@ -25,14 +25,14 @@ from __future__ import division
 import os
 import traceback
 import types
-import math
 # anaconda module imports
 from PyQt4 import QtGui, QtCore
 import numpy as np
-import csv
-from inspect import getsourcefile
 from functools import wraps
 import pyqtgraph as pg
+import logging
+import logging.handlers
+from datetime import datetime
 
 import serial
 import serial.tools.list_ports
@@ -74,6 +74,7 @@ class MainWindow(QtGui.QWidget):
         self.scrolling_pen_width = 5
         self.sampling_rate = 500 # Hz
         self.init_curves()        
+        self.zero_bp_offset = 0
         
     def init_curves(self):
         self.trigger_plot.clear()
@@ -106,9 +107,7 @@ class MainWindow(QtGui.QWidget):
         self.btn_start = QtGui.QPushButton('Start Monitor')
         
         self.btn_rescan = QtGui.QPushButton('Rescan Serial Ports')
-        
-        self.mean_HR_window = QtGui.QLabel('Mean HR over timescale = 0 BPM')
-        self.mean_BP_window = QtGui.QLabel('Mean BP over timescale = 0 mmHg')
+        self.btn_zero = QtGui.QPushButton('Zero Transducer')
         
         layout_mid = QtGui.QHBoxLayout()
         layout_mid.addWidget(self.trigger_plot)
@@ -121,24 +120,24 @@ class MainWindow(QtGui.QWidget):
         layout_bottom.addWidget(self.vertical_range_selector)
         layout_bottom.addWidget(QtGui.QLabel('Timescale Range:'))
         layout_bottom.addWidget(self.timescale_selector)
+        layout_bottom.addWidget(self.btn_zero)
         layout_bottom.addWidget(self.btn_start)  
-        
-        layout_stats = QtGui.QGridLayout()
-        layout_stats.addWidget(self.mean_HR_window, 1, 1)
-        layout_stats.addWidget(self.mean_BP_window, 1, 2)
         
         layout_main = QtGui.QVBoxLayout()
         layout_main.addLayout(layout_mid)
         layout_main.addLayout(layout_bottom)
-        layout_main.addLayout(layout_stats)
         self.setLayout(layout_main)
         
         self.btn_rescan.pressed.connect(self.update_serial_port_selector) 
         self.btn_start.pressed.connect(self.start_monitor)
         self.vertical_range_selector.currentIndexChanged.connect(self.change_vertical_scale)
         self.timescale_selector.currentIndexChanged.connect(self.change_timescale)
-        
+        self.btn_zero.pressed.connect(self.zero_transducer)
     
+    @QTSlotExceptionRationalizer("bool")
+    def zero_transducer(self):
+        self.zero_bp_offset = self.data_buffer[self.scrolling_pen_pos-1]
+        
     @QTSlotExceptionRationalizer("bool")
     def update_serial_port_selector(self):
         self.serial_ports = self.teensy.scan_serial_ports()
@@ -155,17 +154,19 @@ class MainWindow(QtGui.QWidget):
         _, x_max = self.plot_xrange
         max_scrolling_pen_pos = x_max * self.sampling_rate
         sample_values, triggers = self.teensy.get_sensor_values()
-        bp_values = [adc_count_to_bp(val) for val in sample_values]
+        bp_values = [adc_count_to_bp(val, self.zero_bp_offset) for val in sample_values]
         
         for bp_val, trigger in zip(bp_values, triggers):
             self.scrolling_pen_pos = self.scrolling_pen_pos % max_scrolling_pen_pos
             self.data_buffer[self.scrolling_pen_pos] = bp_val
-            self.scrolling_pen_pos += 1
             trigger_val = int(trigger)
+            
+            logger.info("{}: {} {}".format(datetime.now().strftime('%Y-%m-%d-%H-%M-%f'), bp_val, trigger_val))
             if trigger_val:
                 self.trigger_buffer[self.scrolling_pen_pos] = +400
             else:
                 self.trigger_buffer[self.scrolling_pen_pos] = -400
+            self.scrolling_pen_pos += 1
         
         erase_l = self.scrolling_pen_pos + 1 % max_scrolling_pen_pos
         erase_r = self.scrolling_pen_pos + 1 + self.scrolling_pen_width % max_scrolling_pen_pos
@@ -173,6 +174,9 @@ class MainWindow(QtGui.QWidget):
         self.bp_curve.setData(self.x_seconds, self.data_buffer)
         self.trigger_curve.setData(self.x_seconds, self.trigger_buffer)
         self.trigger_plot.update()
+        
+    def update_mean_bp(self):
+        pass
     
     @QTSlotExceptionRationalizer("bool")
     def change_timescale(self, *e):
@@ -204,6 +208,7 @@ class MainWindow(QtGui.QWidget):
     @QTSlotExceptionRationalizer("bool")
     def start_monitor(self):
         if not self.monitor_running:
+            handler.doRollover()
             self.init_curves()
             self.teensy.serial_port = self.get_selected_serial_port()
             self.teensy.start()
@@ -271,10 +276,10 @@ class Teensy(object):
             sample_values.append(sampleval)
             triggers.append(trigger)
             
-def adc_count_to_bp(adc_count_str):
+def adc_count_to_bp(adc_count_str, zero_offset=0):
     VREF = 4.096 # volts
     ADC_COUNTS_MIDPOINT = 0x8000    
-    ADC_VOLTAGE_FSR = 3*VREF    
+    ADC_VOLTAGE_FSR = 6*VREF    
     AMP_GAIN = 727.4706
     CABLE_DRIVER_GAIN = 2
     V_SENSOR_TO_MMHG = 0.00003
@@ -282,7 +287,7 @@ def adc_count_to_bp(adc_count_str):
     adc_count = int(adc_count_str)
     bipolar_adc_count = adc_count - ADC_COUNTS_MIDPOINT
     voltage = (float(bipolar_adc_count) / ADC_COUNTS_MIDPOINT) * ADC_VOLTAGE_FSR
-    return voltage / (V_SENSOR_TO_MMHG*AMP_GAIN*CABLE_DRIVER_GAIN)
+    return (voltage / (V_SENSOR_TO_MMHG*AMP_GAIN*CABLE_DRIVER_GAIN)) - zero_offset
 
 def main():
     w = 850; h = 370
@@ -295,4 +300,16 @@ def main():
     return win
 
 if __name__ == '__main__':
+    log_dir = 'logs'    
+    
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    log_filename = os.path.join(log_dir, 'bp_triggering.log')
+    # Set up a specific logger with our desired output level
+    logger = logging.getLogger('triggeringLogger')
+    logger.setLevel(logging.INFO)
+    
+    handler = logging.handlers.RotatingFileHandler(log_filename, backupCount=2000)
+    logger.addHandler(handler)
     win = main()

@@ -12,7 +12,7 @@ const uint8_t PULSE_DURATION = TRIGGER_PULSE_DURATION / SAMPLING_PERIOD;
 volatile uint8_t pulseDurationCount;
 volatile bool triggerPulseHigh = false;
 
-const uint8_t ANALOG_INPUT_CONTROL_BYTE = 0x8C;
+const uint8_t ANALOG_INPUT_CONTROL_BYTE = 0x8F; // 3x range: 0x8C, 6x range: 0x8F
 const uint8_t MODE_CONTROL_BYTE = 0x88;
 const uint8_t CONVERSION_START_BYTE = 0x80;
 const uint8_t SLAVE_SELECT_PIN = 10;
